@@ -3,6 +3,7 @@ from config import Config
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_migrate import Migrate
+from flask_cors import CORS
 import openai
 from openai import AzureOpenAI  # <-- IMPORT THE NEW AZURE CLIENT
 import os
@@ -11,6 +12,7 @@ from datetime import datetime
 # 1. Create the app and load config FIRST
 app = Flask(__name__)
 app.config.from_object(Config)
+CORS(app)
 
 # 2. Create the db and other extensions
 db = SQLAlchemy(app) 
@@ -66,7 +68,7 @@ def get_image_for_text(text_to_image):
         return None
 
 
-# --- THIS IS THE UPDATED ROUTE FOR SCRUM-6 and SCRUM-8/11 ---
+# Method for processing a message in chat
 @app.route('/api/chat/message', methods=['POST'])
 def process_message():
     data = request.get_json()
@@ -74,7 +76,6 @@ def process_message():
     user_text = data.get('text')
     conversation_id = data.get('conversationId')
 
-    # --- START of SCRUM-8/11 Logic ---
     try:
         # Step 1: Find the user
         user = User.query.get(user_id)
@@ -87,11 +88,13 @@ def process_message():
             if not conversation:
                 return jsonify({"error": "Conversation not found"}), 404
         else:
-            conversation = Conversation(user_id=user.id, topic="New Chat")
+            # Let's use the topic from the frontend, or a default
+            topic = data.get('topic', 'General Conversation') 
+            conversation = Conversation(user_id=user.id, topic=topic)
             db.session.add(conversation)
-            db.session.commit()
+            db.session.commit() # Commit here to get conversation.id
 
-        # Step 3: Save the user's message
+        # Step 3: Save the user's message (You already do this!)
         user_message = Message(
             conversation_id=conversation.id,
             sender='user', 
@@ -99,31 +102,52 @@ def process_message():
         )
         db.session.add(user_message)
         db.session.commit()
-        # --- END of SCRUM-8/11 Logic ---
 
-        # --- START of SCRUM-6 Logic (NEW v1.0.0 SYNTAX) ---
-        # Step 4: Call the Azure AI
+        # --- START of SCRUM-6 Logic (UPGRADED) ---
         
         deployment = app.config['AZURE_OPENAI_DEPLOYMENT_NAME']
-        system_prompt = f"You are a helpful language tutor. The user is learning {user.target_language} at a {user.fluency_level} level."
+
+        # --- 1. Define the System Prompt ---
+        system_prompt = f"""
+        You are Kairos, an immersive AI language tutor. Your primary goal is to help me learn {user.target_language} by having a natural, engaging conversation, *not* by quizzing me.
+
+        My Profile:
+        - Language I'm Learning: {user.target_language}
+        - My Fluency: {user.fluency_level}
+        - Conversation Topic: {conversation.topic}
+
+        Your Rules:
+        1. Immerse Me: Speak *only* in {user.target_language} unless I explicitly ask for help in English.
+        2. Adapt to Me: Adjust your vocabulary and sentence complexity to my {user.fluency_level} level.
+        3. Stay on Topic: Keep the conversation focused on our current topic: {conversation.topic}.
+        4. Gentle Correction: When I make a grammatical or vocabulary mistake, correct it *naturally* as part of your response.
+           - Example (if I'm learning English and say "I eated pizza.")
+           - Your response should be: "Oh, you *ate* pizza? What kind was it?"
+        5. Be Encouraging: Be patient, friendly, and supportive.
+        """
         
-        # This is the new way to call the API
+        # --- 2. Build the Message History ---
+        message_history = [{"role": "system", "content": system_prompt}]
+
+        # Fetch all messages for this conversation, in order
+        previous_messages = Message.query.filter_by(conversation_id=conversation.id).order_by(Message.timestamp).all()
+        
+        for msg in previous_messages:
+            # Add each message to the history in {role: ..., content: ...} format
+            message_history.append({"role": msg.sender, "content": msg.text})
+
+        # --- 3. Call the Azure AI with the FULL history ---
         response = client.chat.completions.create(
-            model=deployment, # Use 'model' instead of 'engine'
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_text}
-            ],
+            model=deployment,
+            messages=message_history, # Pass the entire conversation history
             temperature=0.7,
             max_tokens=150
         )
         
-        # This is the new way to get the reply
         ai_text = response.choices[0].message.content.strip()
         # --- END of SCRUM-6 Logic ---
 
-        # --- START of SCRUM-8/11 Logic (Part 2) ---
-        # Step 5: Save the AI's response
+        # Step 5: Save the AI's response (You already do this!)
         ai_message = Message(
             conversation_id=conversation.id,
             sender='ai', 
@@ -131,12 +155,8 @@ def process_message():
         )
         db.session.add(ai_message)
         db.session.commit()
-        # --- END of SCRUM-8/11 Logic (Part 2) ---
 
-        # --- NEW: Call the image function ---
-        generated_image_url = get_image_for_text(ai_text)
-
-        # Step 6: Send the full response
+        # Step 6: Send the full response back to the frontend
         response_json = {
             "conversationId": conversation.id,
             "aiResponse": {
@@ -154,7 +174,7 @@ def process_message():
         return jsonify(response_json), 200
 
     except Exception as e:
-        # This will now catch errors from the AI call or DB
         print(f"Error processing message: {e}")
         db.session.rollback() 
         return jsonify({"error": str(e)}), 500
+
