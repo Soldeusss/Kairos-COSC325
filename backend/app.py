@@ -178,3 +178,30 @@ def process_message():
         db.session.rollback() 
         return jsonify({"error": str(e)}), 500
 
+# Method for getting chat history 
+# Add this new route to backend/app.py
+@app.route('/api/chat/history/<int:convo_id>', methods=['GET'])
+def get_chat_history(convo_id):
+    try:
+        # Find the conversation
+        conversation = Conversation.query.get(convo_id)
+        if not conversation:
+            return jsonify({"error": "Conversation not found"}), 404
+
+        # Get all messages for this conversation, ordered by time
+        messages = Message.query.filter_by(conversation_id=convo_id).order_by(Message.timestamp.asc()).all()
+
+        # Format the messages into a simple list
+        message_list = []
+        for msg in messages:
+            message_list.append({
+                "sender": msg.sender,
+                "text": msg.text,
+                "timestamp": msg.timestamp.isoformat()
+            })
+
+        return jsonify(message_list), 200
+
+    except Exception as e:
+        print(f"Error getting history: {e}")
+        return jsonify({"error": str(e)}), 500
