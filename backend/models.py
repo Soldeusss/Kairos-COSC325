@@ -1,4 +1,6 @@
-from app import db # Import the db instance
+#from flask_sqlalchemy import SQLAlchemy
+from extensions import db
+
 from datetime import datetime # Import datetime for timestamps
 
 class User(db.Model):
