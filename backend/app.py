@@ -9,6 +9,7 @@ from openai import AzureOpenAI  # <-- IMPORT THE NEW AZURE CLIENT
 import os
 from datetime import datetime
 from extensions import db, bcrypt, migrate
+from extensions import db, bcrypt, migrate
 
 # 1. Create the app and load config FIRST
 app = Flask(__name__)
@@ -16,6 +17,27 @@ app.config.from_object(Config)
 CORS(app)
 
 # 2. Create the db and other extensions
+
+
+db.init_app(app)
+bcrypt.init_app(app)
+migrate.init_app(app, db)
+
+with app.app_context():
+    from models import User
+    if not User.query.filter_by(id=1).first():
+        default_user = User(
+            id=1,
+            name="Default User",
+            email="default@example.com",
+            password_hash="placeholder",
+            target_language="Spanish",
+            fluency_level="Beginner"
+        )
+        db.session.add(default_user)
+        db.session.commit()
+        print("✅ Created default user (ID=1)")
+        
 
 
 db.init_app(app)
@@ -196,6 +218,8 @@ def process_message():
         db.session.rollback() 
         return jsonify({"error": str(e)}), 500
 
+if __name__ == '__main__':
+    app.run(debug=True, host='127.0.0.1', port=5000)
 # Method for getting chat history 
 # Add this new route to backend/app.py
 @app.route('/api/chat/history/<int:convo_id>', methods=['GET'])
