@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+instance/
+.mypy_cache/
+.env
+
+# Node / React
+node_modules/
+build/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+venv/
+.env/

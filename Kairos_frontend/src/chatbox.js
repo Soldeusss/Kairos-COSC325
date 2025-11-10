@@ -1,48 +1,124 @@
-import './chatbox_style.css';
+/** MAIN controller for website. Sidebar and main chat display is here. */
+import React, { useState } from "react";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom"; // ← add this line
+import "./chatbox_style.css";
+import Settings from "./settings"; // ← import your new Settings component
 
 function App() {
+  const [messages, setMessages] = useState([
+    { sender: "ai", text: "Hello! How can I help you today?" },
+  ]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(true);
+
+  // same sendMessage function here …
+ const sendMessage = async (e) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    const userMessage = { sender: "user", text: input };
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("http://127.0.0.1:5000/api/chat/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: 1,
+          text: input,
+          conversationId: null,
+        }),
+      });
+
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+      const data = await response.json();
+      const aiText = data?.aiResponse?.text || "Error: No AI response.";
+
+      setMessages((prev) => [...prev, { sender: "ai", text: aiText }]);
+    } catch (err) {
+      console.error("❌ Chat API error:", err);
+      setMessages((prev) => [
+        ...prev,
+        { sender: "ai", text: "Sorry, I couldn't reach the server." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
-    // Your HTML goes inside this outer div, replacing the old header
-    <div className="App">
+    <Router> {/* ← wraps everything */}
+      <div className="app-layout">
+        {/* Sidebar */}
+        <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
+          <button className="toggle-btn" onClick={() => setMenuOpen(!menuOpen)}>
+            {menuOpen ? "❮" : "❯"}
+          </button>
+          <h2>Main Menu</h2>
+          <ul>
+            {/* Use Links instead of <li> click handlers */}
+            <li><Link to="/">Chat</Link></li>
+            <li><Link to="/history">History</Link></li>
+            <li><Link to="/settings">Settings</Link></li>
+          </ul>
+        </aside>
 
-      {/* PASTE YOUR CODE HERE */}
-      <div class="chat-container">
-        
-        <header class="chat-header">
-            <h1>Kairos Chat</h1>
-        </header>
+        {/* Chat section (main area changes based on route) */}
+        <div className="chat-container">
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <>
+                  <header className="chat-header"><h1>Kairos Chat</h1></header>
+                  <main className="chat-window">
+                    {messages.map((msg, idx) => (
+                      <div
+                        key={idx}
+                        className={`message ${
+                          msg.sender === "ai" ? "ai-message" : "user-message"
+                        }`}
+                      >
+                        <p>{msg.text}</p>
+                      </div>
+                    ))}
+                    {loading && (
+                      <div className="message ai-message">
+                        <p>Thinking...</p>
+                      </div>
+                    )}
+                  </main>
+                  <footer className="chat-input-area">
+                    <form className="chat-input-form" onSubmit={sendMessage}>
+                      <input
+                        type="text"
+                        placeholder="Type your message..."
+                        autoComplete="off"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        disabled={loading}
+                      />
+                      <button type="submit" id="send-button" disabled={loading}>
+                        Send
+                      </button>
+                    </form>
+                  </footer>
+                </>
+              }
+            />
 
-        <main class="chat-window">
-            
-            <div class="message ai-message">
-                <p>Hello! How can I help you today?</p>
-            </div>
-            
-            <div class="message user-message">
-                <p>Please translate this text that im writing from english to spanish.</p>
-            </div>
+            {/* NEW: when URL is /settings, show the Settings component */}
+            <Route path="/settings" element={<Settings />} />
 
-        </main>
-
-        <footer class="chat-input-area">
-            <form class="chat-input-form" id="chat-form">
-                <input
-                    type="text" 
-                    id="message-input"
-                    placeholder="Type your message..."
-                    autocomplete="off"
-                />
-                <button type="submit" id="send-button">Send</button>
-            </form>
-        </footer>
-
+            {/* You can add more pages later, like history, etc. */}
+          </Routes>
+        </div>
       </div>
-      
-
-    </div>
+    </Router>
   );
 }
-
-
 
 export default App;

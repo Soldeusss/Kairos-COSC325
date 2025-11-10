@@ -1,109 +1,186 @@
-
-
-/* Ensures padding and borders are included in the element's total width/height */
+/* reset and base */
 * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0; /*Padding creates internal space within an element*/ 
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 body, html {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    height: 100%;
-    background-color: #f4f4f8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  height: 100%;
+  background-color: #f4f4f8;
 }
 
-/* This makes app fill the entire phone screen */
+/* main app layout*/
+.app-layout {
+  display: flex;
+  height: 100dvh;
+  background-color: #f4f4f8;
+  overflow: hidden;
+}
+
+/* sidebar, small menu on left*/
+.sidebar {
+  width: 250px;
+  background-color: #1c1937;
+  color: white;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  transition: width 0.3s ease;
+  overflow: hidden;
+}
+
+.sidebar a {
+    text-decoration: none; /* This is to stylize the side bar content. Get rid of the ugly URL look */
+    color: inherit;
+    display: block;
+    width: 100%;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+}
+
+.sidebar li {
+  padding: 10px 0;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.sidebar li:hover { /*How the sidebar titles change color when hovered over*/
+  color: #b3b3ff;
+}
+
+/* Sidebar toggle button */
+.toggle-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  align-self: flex-end;
+  margin-bottom: 10px;
+}
+
+/* Collapsed (small) sidebar */
+.sidebar:not(.open) {
+  width: 60px;
+}
+
+.sidebar:not(.open) h2,
+.sidebar:not(.open) ul {
+  display: none;
+}
+
+/* chat container, (big area on right) */
 .chat-container {
-    display: flex;
-    flex-direction: column; /* Stacks header, chat, and input vertically */
-    height: 100vh; /* 100% of the viewport height */
-    max-width: 800px; /* Set a max-width for wider screens */
-    margin: 0 auto; /* Center the container on desktops */
-    background-color: #ffffff;
-    box-shadow: 0 0 20px rgba(0,0,0,0.05); /* Adds a subtle shadow on desktop */
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  height: 100dvh;
+  background-color: #ffffff;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.05);
+  border-left: 1px solid #ddd;
 }
-/* This makes the top geader */
+
+/* chat header */
 .chat-header {
-    padding: 20px;
-    background-color: #2817c2; 
-    color: white;
-    text-align: center;
-    font-size: 1.2rem;
+  padding: 20px;
+  background-color: #1c1937;
+  color: white;
+  text-align: center;
+  font-size: 1.2rem;
+  position: relative;
 }
 
-/* --- CHAT WINDOW --- */
-
-/* This is the main message area */
+/* chat window */
 .chat-window {
-    flex-grow: 1; /* flex allows this area to grow and fill available space */
-    padding: 20px;
-    overflow-y: auto; /* adds a scrollbar  if messages overflow */
-    display: flex;
-    flex-direction: column; /* Stacks messages vertically */
-    gap: 15px; /* Adds space between message bubbles */
-    background-color: #000000;
-   
+  flex-grow: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  background-color: #809ea5;
 }
 
-/* message bubbles styles */
+/* message bubbles */
 .message {
-    max-width: 75%; 
-    padding: 12px 18px;
-    border-radius: 20px;
-    line-height: 1.4;
+  max-width: 75%;
+  padding: 12px 18px;
+  border-radius: 20px;
+  line-height: 1.4;
 }
 
-/* AI Message: Aligned left, grey bubble  */
 .message.ai-message {
-    align-self: flex-start; /* Aligns to the left */
-    background-color: #333333;
-    color: #fdfdfd;
+  align-self: flex-start;
+  background-color: #333333;
+  color: #fdfdfd;
 }
 
-/* User Message: Aligned right, blue bubble  */
 .message.user-message {
-    align-self: flex-end; /* Aligns to the right */
-    background-color: #007bff; /* Standard "user" blue */
-    color: #fff;
+  align-self: flex-end;
+  background-color: #007bff;
+  color: #fff;
 }
 
-
-/* --- CHAT INPUT --- */
-
+/* Chat input area: */
 .chat-input-area {
-    padding: 15px;
-    background-color: #f9f9f9;
-    border-top: 1px solid #ddd;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border-top: 1px solid #ddd;
 }
 
 .chat-input-form {
-    display: flex; /* Makes the input and button sit side-by-side */
-    gap: 10px; /* Space between input and button */
+  display: flex;
+  gap: 10px;
 }
 
-/* The text input box */
 .chat-input-form input {
-    flex-grow: 1; /* Allows the input to grow and fill the space */
-    border: 1px solid #ccc;
-    border-radius: 20px;
-    padding: 12px 15px;
-    font-size: 1rem;
+  flex-grow: 1;
+  border: 1px solid #ccc;
+  border-radius: 20px;
+  padding: 12px 15px;
+  font-size: 1rem;
 }
 
-/*  send button */
 .chat-input-form button {
-    background-color: #007bff;
-    color: white;
-    border: none;
-    padding: 0 20px;
-    border-radius: 20px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer; 
-    transition: background-color 0.2s;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 0 20px;
+  border-radius: 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
 .chat-input-form button:hover {
-    background-color: #0056b3;
+  background-color: #0056b3;
 }
+/*Mobile port (maybe) */
+/* === RESPONSIVE (MOBILE) === 
+@media (max-width: 768px) {
+  .sidebar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    z-index: 1000;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .chat-container {
+    border-left: none;
+  }
+} */
+

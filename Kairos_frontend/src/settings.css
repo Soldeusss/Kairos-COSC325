@@ -1,0 +1,68 @@
+.settings-page { /* Parent heading in which all other settings page formatting will follow*/
+  padding: 40px;
+  flex-grow:1;
+  display: flex;
+  flex-direction: column;
+  background-color: #809ea5;
+  color: white;
+}
+
+.settings-page h1 { /* Settings header formatting */
+  font-size: 2.8rem;
+  margin-bottom: 30px;
+  padding: 20px 40px;
+  margin: -40px -40px 30px -40px;
+  color: #ffffff;
+  background-color:#1c1937;
+  border-bottom: 4px solid #ddd;
+  padding-bottom: 20px;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  max-width: 400px;
+}
+/*The following formats the drop down menus*/
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-weight: 600;
+  font-size: 1.8rem;
+  color: #ffffff;
+  text-decoration: underline 4px solid #ffffff;
+  text-underline-offset: 11px;
+  padding-bottom:10px;
+  
+}
+.form-group select:focus {
+  border-color: #1c1937;
+  outline: none;
+}
+.form-group select {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+  background-color: #f9f9f9;
+  transition: border-color 0.2s;
+}
+.save-button {/*format save button*/
+  align-self: flex-start;
+  background-color: #1c1937;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 25px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.save-button:hover {
+  background-color: #0056b3;
+}
