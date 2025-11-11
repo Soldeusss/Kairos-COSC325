@@ -1,36 +1,32 @@
 from flask import Flask, jsonify, request
 from config import Config
-from flask_sqlalchemy import SQLAlchemy
-from flask_bcrypt import Bcrypt
-from flask_migrate import Migrate
 from flask_cors import CORS
 import openai
-from openai import AzureOpenAI  # <-- IMPORT THE NEW AZURE CLIENT
+from openai import AzureOpenAI
 import os
 from datetime import datetime
-from extensions import db, bcrypt, migrate
-from extensions import db, bcrypt, migrate
+from extensions import db, bcrypt, migrate  # <-- Removed duplicate import
 
 # 1. Create the app and load config FIRST
 app = Flask(__name__)
 app.config.from_object(Config)
 CORS(app)
 
-# 2. Create the db and other extensions
-
-
+# 2. Initialize extensions ONCE
 db.init_app(app)
 bcrypt.init_app(app)
 migrate.init_app(app, db)
 
+# 3. Create a default user in the database if one doesn't exist
+# This block runs only when the application starts
 with app.app_context():
-    from models import User
+    from models import User # Import models inside context for this check
     if not User.query.filter_by(id=1).first():
         default_user = User(
             id=1,
             name="Default User",
             email="default@example.com",
-            password_hash="placeholder",
+            password_hash="placeholder", # You should hash this!
             target_language="Spanish",
             fluency_level="Beginner"
         )
@@ -38,28 +34,7 @@ with app.app_context():
         db.session.commit()
         print("✅ Created default user (ID=1)")
         
-
-
-db.init_app(app)
-bcrypt.init_app(app)
-migrate.init_app(app, db)
-
-with app.app_context():
-    from models import User
-    if not User.query.filter_by(id=1).first():
-        default_user = User(
-            id=1,
-            name="Default User",
-            email="default@example.com",
-            password_hash="placeholder",
-            target_language="Spanish",
-            fluency_level="Beginner"
-        )
-        db.session.add(default_user)
-        db.session.commit()
-        print("✅ Created default user (ID=1)")
-        
-# 3. NOW, we can safely import the models.
+# 4. NOW, we can safely import the rest of the models for the routes
 from models import User, Conversation, Message 
 
 # --- SCRUM-36: Configure Azure Client (NEW v1.0.0 SYNTAX) ---
@@ -79,6 +54,74 @@ except Exception as e:
 def index():
     return "Hello, Pickle Inc. Backend is running!"
 
+# User account endpoints - For Sign up and Log in
+@app.route('/api/register', methods=['POST'])
+def register_user():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+
+        # Check if user already exists
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            return jsonify({"error": "Email already in use"}), 400
+
+        # Hash the password
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+
+        # Create new user
+        new_user = User(
+            email=email,
+            password_hash=hashed_password,
+            name=data.get('name', 'New User'),
+            target_language=data.get('target_language', 'Spanish'),
+            fluency_level=data.get('fluency_level', 'Beginner')
+        )
+
+        db.session.add(new_user)
+        db.session.commit()
+
+        print(f"✅ New user created: {new_user.email}")
+        # Return the new user's data (excluding password)
+        return jsonify({
+            "id": new_user.id,
+            "email": new_user.email,
+            "name": new_user.name
+        }), 201 # 201 means "Created"
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in /api/register: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/login', methods=['POST'])
+def login_user():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+
+        user = User.query.filter_by(email=email).first()
+
+        # Check if user exists and password is correct
+        if user and bcrypt.check_password_hash(user.password_hash, password):
+            print(f"✅ User login successful: {user.email}")
+            return jsonify({
+                "message": "Login successful",
+                "user": {
+                    "id": user.id,
+                    "name": user.name,
+                    "email": user.email
+                }
+            }), 200
+        else:
+            print(f"❌ Login failed for: {email}")
+            return jsonify({"error": "Invalid email or password"}), 401 # 401 means "Unauthorized"
+
+    except Exception as e:
+        print(f"Error in /api/login: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # Function to handle unimplemented image API
 # This function will call DALL-E, but only if it's configured
@@ -92,13 +135,7 @@ def get_image_for_text(text_to_image):
     
     try:
         # (Code if it were enabled)
-        # result = client.images.generate(
-        #     model=dalle_deployment,
-        #     prompt=f"A simple, clear digital art image of: {text_to_image}",
-        #     n=1
-        # )
-        # image_url = result.data[0].url
-        # return image_url
+        # ...
         
         # placeholder to show it's skipped
         return None 
@@ -173,8 +210,9 @@ def process_message():
         previous_messages = Message.query.filter_by(conversation_id=conversation.id).order_by(Message.timestamp).all()
         
         for msg in previous_messages:
-            # Add each message to the history in {role: ..., content: ...} format
-            message_history.append({"role": msg.sender, "content": msg.text})
+            # Translate your database role ('user' or 'ai') to the API role ('user' or 'assistant')
+            role = "assistant" if msg.sender == "ai" else "user"
+            message_history.append({"role": role, "content": msg.text})
 
         # --- 3. Call the Azure AI with the FULL history ---
         response = client.chat.completions.create(
@@ -218,8 +256,6 @@ def process_message():
         db.session.rollback() 
         return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    app.run(debug=True, host='127.0.0.1', port=5000)
 # Method for getting chat history 
 # Add this new route to backend/app.py
 @app.route('/api/chat/history/<int:convo_id>', methods=['GET'])
@@ -247,5 +283,6 @@ def get_chat_history(convo_id):
     except Exception as e:
         print(f"Error getting history: {e}")
         return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)
