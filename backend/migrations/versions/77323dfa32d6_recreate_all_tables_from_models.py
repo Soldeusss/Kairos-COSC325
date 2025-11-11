@@ -1,8 +1,8 @@
-"""Initial database setup
+"""Recreate all tables from models
 
-Revision ID: c39d0645578c
+Revision ID: 77323dfa32d6
 Revises: 
-Create Date: 2025-11-06 20:45:19.886668
+Create Date: 2025-11-11 14:23:21.349490
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'c39d0645578c'
+revision = '77323dfa32d6'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -25,6 +25,7 @@ def upgrade():
     sa.Column('password_hash', sa.String(length=128), nullable=False),
     sa.Column('target_language', sa.String(length=50), nullable=True),
     sa.Column('fluency_level', sa.String(length=50), nullable=True),
+    sa.Column('topic', sa.String(length=100), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email')
     )

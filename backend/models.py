@@ -11,6 +11,7 @@ class User(db.Model):
     target_language = db.Column(db.String(50), nullable=True) # Optional for now
     fluency_level = db.Column(db.String(50), nullable=True) # Optional for now
     conversations = db.relationship('Conversation', backref='user', lazy=True)
+    topic = db.Column(db.String(100), default="General")
 
     # Add methods for setting and checking password later
     # Example: def set_password(self, password): ...

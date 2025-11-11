@@ -1,5 +1,5 @@
 /** MAIN controller for website. Sidebar and main chat display is here. */
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react"; // ← added useEffect here
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom"; // ← add this line
 import "./chatbox_style.css";
 import Settings from "./settings"; // ← import your new Settings component
@@ -11,6 +11,33 @@ function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(true);
+
+  // 🧠 Store user settings dynamically from backend
+  const [topic, setTopic] = useState("general");
+  const [language, setLanguage] = useState("spanish");
+  const [proficiency, setProficiency] = useState("beginner");
+
+  // 🧩 Load saved user settings on page load
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:5000/api/user/settings/1");
+        if (!res.ok) throw new Error(`HTTP error! ${res.status}`);
+        const data = await res.json();
+
+        setTopic(data.topic?.toLowerCase() || "general");
+        setLanguage(data.language?.toLowerCase() || "spanish");
+        setProficiency(data.proficiency?.toLowerCase() || "beginner");
+
+        console.log("✅ Loaded settings:", data);
+      } catch (err) {
+        console.error("❌ Failed to load settings:", err);
+      }
+    };
+
+    loadSettings();
+  }, []);
+
   const speak = (text) => {
     // Stop any speech that is currently playing
     window.speechSynthesis.cancel();
@@ -23,8 +50,9 @@ function App() {
     // Tell the browser to speak
     window.speechSynthesis.speak(utterance);
   };
+
   // same sendMessage function here …
- const sendMessage = async (e) => {
+  const sendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
 
@@ -41,6 +69,9 @@ function App() {
           userId: 1,
           text: input,
           conversationId: null,
+          topic: topic, // dynamically pulled from backend settings
+          language: language,
+          proficiency: proficiency,
         }),
       });
 
@@ -60,6 +91,7 @@ function App() {
       setLoading(false);
     }
   };
+
   return (
     <Router> {/* ← wraps everything */}
       <div className="app-layout">
@@ -94,15 +126,15 @@ function App() {
                         }`}
                       >
                         <p>{msg.text}</p>
-						{msg.sender === 'ai' && (
-						  <button 
-							onClick={() => speak(msg.text)} 
-							className="speak-button"
-							aria-label="Speak message"
-							>
-							  🔊
-							</button>
-									)}
+                        {msg.sender === 'ai' && (
+                          <button 
+                            onClick={() => speak(msg.text)} 
+                            className="speak-button"
+                            aria-label="Speak message"
+                          >
+                            🔊
+                          </button>
+                        )}
                       </div>
                     ))}
                     {loading && (
@@ -131,7 +163,19 @@ function App() {
             />
 
             {/* NEW: when URL is /settings, show the Settings component */}
-            <Route path="/settings" element={<Settings />} />
+            <Route
+              path="/settings"
+              element={
+                <Settings
+                  topic={topic}
+                  setTopic={setTopic}
+                  language={language}
+                  setLanguage={setLanguage}
+                  proficiency={proficiency}
+                  setProficiency={setProficiency}
+                />
+              }
+            />
 
             {/* You can add more pages later, like history, etc. */}
           </Routes>

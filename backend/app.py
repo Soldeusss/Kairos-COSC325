@@ -19,21 +19,29 @@ migrate.init_app(app, db)
 
 
 
-with app.app_context():
-    from models import User
-    if not User.query.filter_by(id=1).first():
-        default_user = User(
-            id=1,
-            name="Default User",
-            email="default@example.com",
-            password_hash="placeholder",
-            target_language="Spanish",
-            fluency_level="Beginner"
-        )
-        db.session.add(default_user)
-        db.session.commit()
-        print("✅ Created default user (ID=1)")
-        
+def ensure_default_user():
+    """Create default user only when app is actually running (not during CLI import)."""
+    from models import User  # local import to avoid early model use
+    from sqlalchemy import inspect
+
+    with app.app_context():
+        insp = inspect(db.engine)
+        # Only attempt if the 'user' table exists AND has the new 'topic' column
+        if 'user' in insp.get_table_names():
+            cols = {c['name'] for c in insp.get_columns('user')}
+            if 'topic' in cols and User.query.get(1) is None:
+                default_user = User(
+                    id=1,
+                    name="Default User",
+                    email="default@example.com",
+                    password_hash="placeholder",
+                    target_language="Spanish",
+                    fluency_level="Beginner",
+                    topic="General",
+                )
+                db.session.add(default_user)
+                db.session.commit()
+                print("✅ Created default user (ID=1)")   
 # 3. NOW, we can safely import the models.
 from models import User, Conversation, Message 
 
@@ -183,7 +191,36 @@ def process_message():
         # --- START of SCRUM-6 Logic (UPGRADED) ---
         
         deployment = app.config['AZURE_OPENAI_DEPLOYMENT_NAME']
+        fluency_level = user.fluency_level.lower()
 
+        if fluency_level == "beginner":
+            fluency_instructions = """
+            Use short, simple sentences and very common vocabulary.
+            Avoid idioms or slang.
+            Correct mistakes explicitly and gently, explaining the rule in English.
+            Keep responses under 3 sentences.
+            Encourage the user often with praise.
+            """
+        elif fluency_level == "intermediate":
+            fluency_instructions = """
+            Use more natural phrasing and intermediate-level vocabulary.
+            Include compound and complex sentences using connectors like 'because', 'although', etc.
+            Correct errors naturally by restating them correctly in context, without full grammar explanations.
+            Encourage longer replies and add small cultural references.
+            """
+        elif fluency_level == "advanced":
+            fluency_instructions = """
+            Use fluent, natural speech and idiomatic expressions.
+            Challenge the user with nuanced questions, abstract topics, and humor.
+            Correct errors subtly by prompting self-correction.
+            Avoid basic grammar explanations unless explicitly asked.
+            """
+        else:
+            fluency_instructions = """
+            Speak clearly and adapt naturally to the user's responses.
+            """
+
+        
         # --- 1. Define the System Prompt ---
         system_prompt = f"""
         You are Kairos, an immersive AI language tutor. Your primary goal is to help me learn {user.target_language} by having a natural, engaging conversation, *not* by quizzing me.
@@ -192,6 +229,9 @@ def process_message():
         - Language I'm Learning: {user.target_language}
         - My Fluency: {user.fluency_level}
         - Conversation Topic: {conversation.topic}
+
+        Behavior Rules:
+        {fluency_instructions}
 
         Your Rules:
         1. Immerse Me: Speak *only* in {user.target_language} unless I explicitly ask for help in English.
@@ -287,9 +327,10 @@ def get_chat_history(convo_id):
 def update_user_settings():
     try:
         data = request.get_json()
-        user_id = data.get('userId') # You'll need to send this from the frontend
+        user_id = data.get('userId')
         new_language = data.get('language')
         new_proficiency = data.get('proficiency')
+        new_topic = data.get('topic')
 
         if not user_id:
             return jsonify({"error": "User ID is required"}), 400
@@ -298,19 +339,39 @@ def update_user_settings():
         if not user:
             return jsonify({"error": "User not found"}), 404
 
-        # Update the user's profile in the database
         if new_language:
             user.target_language = new_language
-        
         if new_proficiency:
             user.fluency_level = new_proficiency
-            
+        if new_topic:
+            user.topic = new_topic
+
         db.session.commit()
-        
-        print(f"✅ Updated user {user.id} settings: Lang={user.target_language}, Prof={user.fluency_level}")
+        print(f"✅ Updated user {user.id}: Lang={user.target_language}, Prof={user.fluency_level}, Topic={user.topic}")
         return jsonify({"message": "Settings saved successfully!"}), 200
 
     except Exception as e:
         db.session.rollback()
         print(f"Error updating settings: {e}")
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/user/settings/<int:user_id>', methods=['GET'])
+def get_user_settings(user_id):
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        return jsonify({
+            "language": user.target_language,
+            "proficiency": user.fluency_level,
+            "topic": user.topic
+        }), 200
+
+    except Exception as e:
+        print(f"Error getting user settings: {e}")
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    ensure_default_user()  # safe to call now; DB is migrated when you run the server
+    app.run(debug=True, host="127.0.0.1", port=5000)
