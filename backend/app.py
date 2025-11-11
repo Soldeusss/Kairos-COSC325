@@ -17,16 +17,16 @@ db.init_app(app)
 bcrypt.init_app(app)
 migrate.init_app(app, db)
 
-# 3. Create a default user in the database if one doesn't exist
-# This block runs only when the application starts
+
+
 with app.app_context():
-    from models import User # Import models inside context for this check
+    from models import User
     if not User.query.filter_by(id=1).first():
         default_user = User(
             id=1,
             name="Default User",
             email="default@example.com",
-            password_hash="placeholder", # You should hash this!
+            password_hash="placeholder",
             target_language="Spanish",
             fluency_level="Beginner"
         )
@@ -34,7 +34,7 @@ with app.app_context():
         db.session.commit()
         print("✅ Created default user (ID=1)")
         
-# 4. NOW, we can safely import the rest of the models for the routes
+# 3. NOW, we can safely import the models.
 from models import User, Conversation, Message 
 
 # --- SCRUM-36: Configure Azure Client (NEW v1.0.0 SYNTAX) ---
@@ -279,10 +279,38 @@ def get_chat_history(convo_id):
             })
 
         return jsonify(message_list), 200
-
     except Exception as e:
         print(f"Error getting history: {e}")
         return jsonify({"error": str(e)}), 500
+ # Add this new route to app.py
+@app.route('/api/user/settings', methods=['PUT'])
+def update_user_settings():
+    try:
+        data = request.get_json()
+        user_id = data.get('userId') # You'll need to send this from the frontend
+        new_language = data.get('language')
+        new_proficiency = data.get('proficiency')
 
-if __name__ == '__main__':
-    app.run(debug=True, host='127.0.0.1', port=5000)
+        if not user_id:
+            return jsonify({"error": "User ID is required"}), 400
+
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Update the user's profile in the database
+        if new_language:
+            user.target_language = new_language
+        
+        if new_proficiency:
+            user.fluency_level = new_proficiency
+            
+        db.session.commit()
+        
+        print(f"✅ Updated user {user.id} settings: Lang={user.target_language}, Prof={user.fluency_level}")
+        return jsonify({"message": "Settings saved successfully!"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating settings: {e}")
+        return jsonify({"error": str(e)}), 500
