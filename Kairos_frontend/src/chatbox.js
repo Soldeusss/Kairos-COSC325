@@ -11,7 +11,18 @@ function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(true);
+  const speak = (text) => {
+    // Stop any speech that is currently playing
+    window.speechSynthesis.cancel();
 
+    // Create the new "utterance" (the thing to be spoken)
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    // will add code here later to select a Spanish/French/German voice
+
+    // Tell the browser to speak
+    window.speechSynthesis.speak(utterance);
+  };
   // same sendMessage function here …
  const sendMessage = async (e) => {
     e.preventDefault();
@@ -83,6 +94,15 @@ function App() {
                         }`}
                       >
                         <p>{msg.text}</p>
+						{msg.sender === 'ai' && (
+						  <button 
+							onClick={() => speak(msg.text)} 
+							className="speak-button"
+							aria-label="Speak message"
+							>
+							  🔊
+							</button>
+									)}
                       </div>
                     ))}
                     {loading && (

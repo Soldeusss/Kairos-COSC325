@@ -163,6 +163,29 @@ body, html {
 .chat-input-form button:hover {
   background-color: #0056b3;
 }
+CSS
+
+/* speak button */
+.speak-button {
+  background: #f1f1f1;
+  border: 1px solid #ccc;
+  border-radius: 50%; /* Makes it a circle */
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  font-size: 1rem;
+  margin-top: 10px;
+  
+  /* Centering the icon */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.speak-button:hover {
+  background: #e0e0e0;
+}
+
 /*Mobile port (maybe) */
 /* === RESPONSIVE (MOBILE) === 
 @media (max-width: 768px) {
