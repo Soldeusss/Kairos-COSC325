@@ -100,7 +100,14 @@ function Settings({ topic, setTopic, language, setLanguage, proficiency, setProf
           >
             <option value="nature">Nature</option>
             <option value="medical">Medical</option>
+            <option value="technology">Technology</option>
+            <option value="school">School</option>
+            <option value="food">Food</option>
+            <option value="activities">Activities/Hobbies</option>
+            <option value="travel">Travel</option>
+            <option value="music">Music</option>
             <option value="whatever">General</option>
+
           </select>
         </div>
 
