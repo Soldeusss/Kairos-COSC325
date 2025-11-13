@@ -6,7 +6,9 @@ from openai import AzureOpenAI
 import os
 from datetime import datetime
 from extensions import db, bcrypt, migrate  # <-- Removed duplicate import
-
+import azure.cognitiveservices.speech as speechsdk
+import io
+from flask import send_file
 # 1. Create the app and load config FIRST
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -331,6 +333,7 @@ def update_user_settings():
         new_language = data.get('language')
         new_proficiency = data.get('proficiency')
         new_topic = data.get('topic')
+        
 
         if not user_id:
             return jsonify({"error": "User ID is required"}), 400
@@ -371,6 +374,66 @@ def get_user_settings(user_id):
     except Exception as e:
         print(f"Error getting user settings: {e}")
         return jsonify({"error": str(e)}), 500
+        
+#
+# ----------------------------------------------------------------------
+# NEW API ENDPOINT FOR CROSS-BROWSER TEXT-TO-SPEECH
+# ----------------------------------------------------------------------
+#
+@app.route('/api/tts', methods=['POST'])
+def text_to_speech():
+    try:
+        data = request.get_json()
+        text = data.get('text')
+        language = data.get('language')
+       
+
+        if not text or not language:
+            return jsonify({"error": "Text and language are required"}), 400
+
+        # 1. Configure the Azure Speech SDK
+        speech_key = app.config['AZURE_SPEECH_KEY']
+        speech_region = app.config['AZURE_SPEECH_REGION']
+        speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
+
+        # 2. Map our app's language name to a specific, high-quality Azure voice
+        # (You can find more voices in the Azure documentation)
+        voice_map = {
+            "spanish": "es-ES-ElviraNeural",  # Spain (Female)
+            "french": "fr-FR-DeniseNeural",   # France (Female)
+            "german": "de-DE-KillianNeural",    # Germany (Female)
+            "english": "en-US-JennyNeural"    # US (Female)
+        }
+
+        # Set the voice, defaulting to English if no match is found
+        voice = voice_map.get(language, "en-US-JennyNeural")
+        speech_config.speech_synthesis_voice_name = voice
+
+        # 3. Synthesize the speech
+        # We use 'None' for audio_config to get the audio data in memory
+        speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
+        
+        result = speech_synthesizer.speak_text_async(text).get()
+
+        # 4. Check for errors from Azure
+        if result.reason == speechsdk.ResultReason.Canceled:
+            cancellation_details = result.cancellation_details
+            print(f"❌ Azure TTS failed: {cancellation_details.reason}")
+            if cancellation_details.reason == speechsdk.CancellationReason.Error:
+                print(f"Error details: {cancellation_details.error_details}")
+            return jsonify({"error": "Azure TTS failed"}), 500
+
+        # 5. Send the MP3 audio data back to the frontend
+        audio_data = result.audio_data
+        return send_file(
+            io.BytesIO(audio_data),
+            mimetype='audio/mpeg',
+            as_attachment=False
+        )
+
+    except Exception as e:
+        print(f"Error in /api/tts: {e}")
+        return jsonify({"error": str(e)}), 500        
 
 if __name__ == "__main__":
     ensure_default_user()  # safe to call now; DB is migrated when you run the server
