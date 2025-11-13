@@ -186,6 +186,38 @@ CSS
   background: #e0e0e0;
 }
 
+/*Style for mute button */
+.mute-button {
+  /* Positioning */
+  position: absolute; 
+  top: 50%;
+  right: 20px; /* 20px from right edge */
+  transform: translateY(-50%); /* centers it vertically */
+
+  /* Appearance */
+  background: #f1f1f1;
+  border: 1px solid #ccc;
+  color: #333; 
+  border-radius: 50%; 
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem; 
+  cursor: pointer;
+  
+  /* Centering the icon inside the circlular area */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Removes default button outlines */
+  outline: none;
+  transition: background-color 0.2s;
+}
+
+.mute-button:hover {
+  background: #e0e0e0; 
+}
+
 /*Mobile port (maybe) */
 /* === RESPONSIVE (MOBILE) === 
 @media (max-width: 768px) {

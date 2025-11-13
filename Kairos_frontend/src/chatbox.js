@@ -1,8 +1,7 @@
-/** MAIN controller for website. Sidebar and main chat display is here. */
-import React, { useState, useEffect } from "react"; // ← added useEffect here
+import React, { useState, useEffect, useRef } from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom"; // ← add this line
 import "./chatbox_style.css";
-import Settings from "./settings"; // ← import your new Settings component
+import Settings from "./settings"; 
 
 function App() {
   const [messages, setMessages] = useState([
@@ -16,7 +15,10 @@ function App() {
   const [topic, setTopic] = useState("general");
   const [language, setLanguage] = useState("spanish");
   const [proficiency, setProficiency] = useState("beginner");
-
+  const [isMuted, setIsMuted] = useState(false);
+  const audioRef = useRef(null);// mute functions
+  const chatWindowRef = useRef(null);
+  const [streamingText, setStreamingText] = useState(null); // for type writer affect
   // 🧩 Load saved user settings on page load
   useEffect(() => {
     const loadSettings = async () => {
@@ -38,18 +40,112 @@ function App() {
     loadSettings();
   }, []);
 
-  const speak = (text) => {
-    // Stop any speech that is currently playing
-    window.speechSynthesis.cancel();
+useEffect(() => {
+    if (isMuted && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    }
+  }, [isMuted]);
+  // useEffect scrolls the chat window to the bottom when new messages are added
+  useEffect(() => {
+    if (chatWindowRef.current) {
+      chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
+    }
+  }, [messages]);
+  
+  // This useEffect handles the typewriter effect
+  useEffect(() => {
+    if (!streamingText) return; // Do nothing if we're not streaming
 
-    // Create the new "utterance" (the thing to be spoken)
-    const utterance = new SpeechSynthesisUtterance(text);
+    let index = 0;
+    const intervalId = setInterval(() => {
+      setMessages(prevMessages => {
+        // Get the last message
+        const lastMsgIndex = prevMessages.length - 1;
+        
+        // This should always be true, but it's a good safety check
+        if (prevMessages[lastMsgIndex]?.sender !== 'ai') {
+          clearInterval(intervalId);
+          setStreamingText(null);
+          return prevMessages;
+        };
 
-    // will add code here later to select a Spanish/French/German voice
+        // Get the (new) text for the last message
+        const newText = streamingText.substring(0, index + 1);
+        const updatedLastMsg = { ...prevMessages[lastMsgIndex], text: newText };
 
-    // Tell the browser to speak
-    window.speechSynthesis.speak(utterance);
+        // Create the new, updated messages array
+        const newMessages = [
+          ...prevMessages.slice(0, lastMsgIndex),
+          updatedLastMsg
+        ];
+        
+        return newMessages;
+      });
+
+      index++;
+
+      // Stop when we've typed out the whole message
+      if (index > streamingText.length) {
+        clearInterval(intervalId);
+        setStreamingText(null);
+        setLoading(false); // <-- Stop "Thinking..." message *after* typing is done
+      }
+    }, 30); // 30ms per character
+
+    // Cleanup function in case the component unmounts
+    return () => clearInterval(intervalId);
+
+  }, [streamingText]); // This effect runs every time 'streamingText' changes
+  
+
+  // "master" function that ALWAYS plays (for the 🔊 button)
+  // ASYNC function that calls our backend
+
+  const playSpeech = async (text) => {
+    
+    // stops track if one is already playing 
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = ''; // Stop it from buffering
+    }
+    try {
+      
+      const response = await fetch("http://127.0.0.1:5000/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: text,
+          language: language
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      
+      const audio = new Audio(audioUrl);
+      audio.play();
+
+      
+      audioRef.current = audio;
+      
+
+    } catch (err) {
+      console.error("❌ Failed to play audio:", err);
+    }
   };
+
+  
+ const speak = async (text) => { // <-- 1. Add 'async'
+    if (isMuted) return; // If muted, do nothing.
+    await playSpeech(text); // <-- 2. Add 'await'
+};
 
   // same sendMessage function here …
   const sendMessage = async (e) => {
@@ -79,19 +175,22 @@ function App() {
 
       const data = await response.json();
       const aiText = data?.aiResponse?.text || "Error: No AI response.";
+      
+      //starts the audio
+      speak(aiText);
+      setMessages((prev) => [...prev, { sender: "ai", text: "" }]);
 
-      setMessages((prev) => [...prev, { sender: "ai", text: aiText }]);
+      setStreamingText(aiText); 
+
     } catch (err) {
       console.error("❌ Chat API error:", err);
       setMessages((prev) => [
         ...prev,
         { sender: "ai", text: "Sorry, I couldn't reach the server." },
       ]);
-    } finally {
-      setLoading(false);
+      setLoading(false); // Set loading false *if* there's an error
     }
-  };
-
+  }
   return (
     <Router> {/* ← wraps everything */}
       <div className="app-layout">
@@ -116,8 +215,17 @@ function App() {
               path="/"
               element={
                 <>
-                  <header className="chat-header"><h1>Kairos Chat</h1></header>
-                  <main className="chat-window">
+                  <header className="chat-header">
+					<h1>Kairos Chat</h1>
+					<button 
+					  className="mute-button"
+				      onClick={() => setIsMuted(!isMuted)}
+					  aria-label={isMuted ? "Unmute" : "Mute"}
+					>					 
+					 {isMuted ? '🔇' : '🔊'}
+				    </button>
+				   </header>
+                  <main className="chat-window" ref={chatWindowRef}>
                     {messages.map((msg, idx) => (
                       <div
                         key={idx}
@@ -128,7 +236,7 @@ function App() {
                         <p>{msg.text}</p>
                         {msg.sender === 'ai' && (
                           <button 
-                            onClick={() => speak(msg.text)} 
+                            onClick={() => playSpeech(msg.text)} 
                             className="speak-button"
                             aria-label="Speak message"
                           >
