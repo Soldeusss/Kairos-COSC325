@@ -1,9 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom"; // ← add this line
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Link,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import "./chatbox_style.css";
-import Settings from "./settings"; 
+import Settings from "./settings";
+import History from "./history";
 
-function App() {
+// 💡 Inner component handles routing logic
+function ChatRoutes() {
   const [messages, setMessages] = useState([
     { sender: "ai", text: "Hello! How can I help you today?" },
   ]);
@@ -11,286 +20,254 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(true);
 
-  // 🧠 Store user settings dynamically from backend
   const [topic, setTopic] = useState("general");
   const [language, setLanguage] = useState("spanish");
   const [proficiency, setProficiency] = useState("beginner");
   const [isMuted, setIsMuted] = useState(false);
-  const audioRef = useRef(null);// mute functions
+  const audioRef = useRef(null);
   const chatWindowRef = useRef(null);
-  const [streamingText, setStreamingText] = useState(null); // for type writer affect
-  // 🧩 Load saved user settings on page load
+  const [streamingText, setStreamingText] = useState(null);
+
+  const location = useLocation();
+
+  // 🧭 Load conversation passed from History
+  useEffect(() => {
+    if (location.state?.conversation) {
+      setMessages(location.state.conversation.messages);
+    }
+  }, [location.state]);
+
+  // 🧩 Load backend settings
   useEffect(() => {
     const loadSettings = async () => {
       try {
         const res = await fetch("http://127.0.0.1:5000/api/user/settings/1");
         if (!res.ok) throw new Error(`HTTP error! ${res.status}`);
         const data = await res.json();
-
         setTopic(data.topic?.toLowerCase() || "general");
         setLanguage(data.language?.toLowerCase() || "spanish");
         setProficiency(data.proficiency?.toLowerCase() || "beginner");
-
-        console.log("✅ Loaded settings:", data);
       } catch (err) {
         console.error("❌ Failed to load settings:", err);
       }
     };
-
     loadSettings();
   }, []);
 
-useEffect(() => {
+  useEffect(() => {
     if (isMuted && audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = '';
+      audioRef.current.src = "";
     }
   }, [isMuted]);
-  // useEffect scrolls the chat window to the bottom when new messages are added
+
   useEffect(() => {
     if (chatWindowRef.current) {
       chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
     }
   }, [messages]);
-  
-  // This useEffect handles the typewriter effect
-  useEffect(() => {
-    if (!streamingText) return; // Do nothing if we're not streaming
 
+  // Typewriter effect
+  useEffect(() => {
+    if (!streamingText) return;
     let index = 0;
     const intervalId = setInterval(() => {
-      setMessages(prevMessages => {
-        // Get the last message
-        const lastMsgIndex = prevMessages.length - 1;
-        
-        // This should always be true, but it's a good safety check
-        if (prevMessages[lastMsgIndex]?.sender !== 'ai') {
+      setMessages((prev) => {
+        const i = prev.length - 1;
+        if (prev[i]?.sender !== "ai") {
           clearInterval(intervalId);
           setStreamingText(null);
-          return prevMessages;
-        };
-
-        // Get the (new) text for the last message
+          return prev;
+        }
         const newText = streamingText.substring(0, index + 1);
-        const updatedLastMsg = { ...prevMessages[lastMsgIndex], text: newText };
-
-        // Create the new, updated messages array
-        const newMessages = [
-          ...prevMessages.slice(0, lastMsgIndex),
-          updatedLastMsg
-        ];
-        
-        return newMessages;
+        const updated = { ...prev[i], text: newText };
+        return [...prev.slice(0, i), updated];
       });
 
       index++;
-
-      // Stop when we've typed out the whole message
       if (index > streamingText.length) {
         clearInterval(intervalId);
         setStreamingText(null);
-        setLoading(false); // <-- Stop "Thinking..." message *after* typing is done
+        setLoading(false);
       }
-    }, 30); // 30ms per character
-
-    // Cleanup function in case the component unmounts
+    }, 30);
     return () => clearInterval(intervalId);
-
-  }, [streamingText]); // This effect runs every time 'streamingText' changes
-  
-
-  // "master" function that ALWAYS plays (for the 🔊 button)
-  // ASYNC function that calls our backend
+  }, [streamingText]);
 
   const playSpeech = async (text) => {
-    
-    // stops track if one is already playing 
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = ''; // Stop it from buffering
+      audioRef.current.src = "";
     }
     try {
-      
-      const response = await fetch("http://127.0.0.1:5000/api/tts", {
+      const res = await fetch("http://127.0.0.1:5000/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: text,
-          language: language
-        }),
+        body: JSON.stringify({ text, language }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
-
-      
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      
-      const audio = new Audio(audioUrl);
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
       audio.play();
-
-      
       audioRef.current = audio;
-      
-
     } catch (err) {
-      console.error("❌ Failed to play audio:", err);
+      console.error("❌ TTS error:", err);
     }
   };
 
-  
- const speak = async (text) => { // <-- 1. Add 'async'
-    if (isMuted) return; // If muted, do nothing.
-    await playSpeech(text); // <-- 2. Add 'await'
-};
+  const speak = async (text) => {
+    if (isMuted) return;
+    await playSpeech(text);
+  };
 
-  // same sendMessage function here …
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
-
     const userMessage = { sender: "user", text: input };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:5000/api/chat/message", {
+      const res = await fetch("http://127.0.0.1:5000/api/chat/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: 1,
           text: input,
           conversationId: null,
-          topic: topic, // dynamically pulled from backend settings
-          language: language,
-          proficiency: proficiency,
+          topic,
+          language,
+          proficiency,
         }),
       });
-
-      if (!response.ok) throw new Error(`Server error: ${response.status}`);
-
-      const data = await response.json();
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      const data = await res.json();
       const aiText = data?.aiResponse?.text || "Error: No AI response.";
-      
-      //starts the audio
+
       speak(aiText);
       setMessages((prev) => [...prev, { sender: "ai", text: "" }]);
+      setStreamingText(aiText);
 
-      setStreamingText(aiText); 
-
+      // Save to history
+      const existing = JSON.parse(localStorage.getItem("chatHistory")) || [];
+      const newChat = {
+        title: input.substring(0, 20) || "New Chat",
+        date: new Date(),
+        messages: [...messages, userMessage, { sender: "ai", text: aiText }],
+      };
+      localStorage.setItem("chatHistory", JSON.stringify([...existing, newChat]));
     } catch (err) {
       console.error("❌ Chat API error:", err);
       setMessages((prev) => [
         ...prev,
         { sender: "ai", text: "Sorry, I couldn't reach the server." },
       ]);
-      setLoading(false); // Set loading false *if* there's an error
+      setLoading(false);
     }
-  }
+  };
+
   return (
-    <Router> {/* ← wraps everything */}
-      <div className="app-layout">
-        {/* Sidebar */}
-        <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-          <button className="toggle-btn" onClick={() => setMenuOpen(!menuOpen)}>
-            {menuOpen ? "❮" : "❯"}
-          </button>
-          <h2>Main Menu</h2>
-          <ul>
-            {/* Use Links instead of <li> click handlers */}
-            <li><Link to="/">Chat</Link></li>
-            <li><Link to="/history">History</Link></li>
-            <li><Link to="/settings">Settings</Link></li>
-          </ul>
-        </aside>
+    <div className="app-layout">
+      {/* Sidebar */}
+      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
+        <button className="toggle-btn" onClick={() => setMenuOpen(!menuOpen)}>
+          {menuOpen ? "❮" : "❯"}
+        </button>
+        <h2>Main Menu</h2>
+        <ul>
+          <li><Link to="/">Chat</Link></li>
+          <li><Link to="/history">History</Link></li>
+          <li><Link to="/settings">Settings</Link></li>
+        </ul>
+      </aside>
 
-        {/* Chat section (main area changes based on route) */}
-        <div className="chat-container">
-          <Routes>
-            <Route
-              path="/"
-              element={
-                <>
-                  <header className="chat-header">
-					<h1>Kairos Chat</h1>
-					<button 
-					  className="mute-button"
-				      onClick={() => setIsMuted(!isMuted)}
-					  aria-label={isMuted ? "Unmute" : "Mute"}
-					>					 
-					 {isMuted ? '🔇' : '🔊'}
-				    </button>
-				   </header>
-                  <main className="chat-window" ref={chatWindowRef}>
-                    {messages.map((msg, idx) => (
-                      <div
-                        key={idx}
-                        className={`message ${
-                          msg.sender === "ai" ? "ai-message" : "user-message"
-                        }`}
-                      >
-                        <p>{msg.text}</p>
-                        {msg.sender === 'ai' && (
-                          <button 
-                            onClick={() => playSpeech(msg.text)} 
-                            className="speak-button"
-                            aria-label="Speak message"
-                          >
-                            🔊
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    {loading && (
-                      <div className="message ai-message">
-                        <p>Thinking...</p>
-                      </div>
-                    )}
-                  </main>
-                  <footer className="chat-input-area">
-                    <form className="chat-input-form" onSubmit={sendMessage}>
-                      <input
-                        type="text"
-                        placeholder="Type your message..."
-                        autoComplete="off"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        disabled={loading}
-                      />
-                      <button type="submit" id="send-button" disabled={loading}>
-                        Send
-                      </button>
-                    </form>
-                  </footer>
-                </>
-              }
-            />
+      {/* Main content */}
+      <div className="chat-container">
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <>
+                <header className="chat-header">
+                  <h1>Kairos Chat</h1>
+                  <button
+                    className="mute-button"
+                    onClick={() => setIsMuted(!isMuted)}
+                  >
+                    {isMuted ? "🔇" : "🔊"}
+                  </button>
+                </header>
 
-            {/* NEW: when URL is /settings, show the Settings component */}
-            <Route
-              path="/settings"
-              element={
-                <Settings
-                  topic={topic}
-                  setTopic={setTopic}
-                  language={language}
-                  setLanguage={setLanguage}
-                  proficiency={proficiency}
-                  setProficiency={setProficiency}
-                />
-              }
-            />
+                <main className="chat-window" ref={chatWindowRef}>
+                  {messages.map((msg, idx) => (
+                    <div
+                      key={idx}
+                      className={`message ${
+                        msg.sender === "ai" ? "ai-message" : "user-message"
+                      }`}
+                    >
+                      <p>{msg.text}</p>
+                      {msg.sender === "ai" && (
+                        <button
+                          onClick={() => playSpeech(msg.text)}
+                          className="speak-button"
+                        >
+                          🔊
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {loading && (
+                    <div className="message ai-message">
+                      <p>Thinking...</p>
+                    </div>
+                  )}
+                </main>
 
-            {/* You can add more pages later, like history, etc. */}
-          </Routes>
-        </div>
+                <footer className="chat-input-area">
+                  <form className="chat-input-form" onSubmit={sendMessage}>
+                    <input
+                      type="text"
+                      placeholder="Type your message..."
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      disabled={loading}
+                    />
+                    <button type="submit" id="send-button" disabled={loading}>
+                      Send
+                    </button>
+                  </form>
+                </footer>
+              </>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <Settings
+                topic={topic}
+                setTopic={setTopic}
+                language={language}
+                setLanguage={setLanguage}
+                proficiency={proficiency}
+                setProficiency={setProficiency}
+              />
+            }
+          />
+          <Route path="/history" element={<History />} />
+        </Routes>
       </div>
-    </Router>
+    </div>
   );
 }
 
-export default App;
+// 🧭 Wrap routes in Router at the top level
+export default function App() {
+  return (
+    <Router>
+      <ChatRoutes />
+    </Router>
+  );
+}

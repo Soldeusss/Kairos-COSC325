@@ -243,6 +243,7 @@ def process_message():
            - Example (if I'm learning English and say "I eated pizza.")
            - Your response should be: "Oh, you *ate* pizza? What kind was it?"
         5. Be Encouraging: Be patient, friendly, and supportive.
+        6. If someone says translate followed by a phrase, translate that phrase to English.
         """
         
         # --- 2. Build the Message History ---
