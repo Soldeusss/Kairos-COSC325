@@ -109,7 +109,7 @@ function ChatRoutes() {
     }
     try {
       const res = await fetch("http://127.0.0.1:5000/api/tts", {
-        method: "POST",
+        method: "POST",git 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, language }),
       });
