@@ -165,6 +165,44 @@ body, html {
 }
 CSS
 
+/* Microphone / Record button */
+.mic-button {
+  background-color: #f1f1f1; 
+  border: 1px solid #ccc;
+  border-radius: 50%; /* Circular shape */
+  width: 45px;       /* Slightly larger than the TTS button for easy clicking */
+  height: 45px;
+  min-width: 45px;   /* Prevents it from squishing on small screens */
+  margin-right: 10px; /* Spacing between mic and input box */
+  
+  /* Font & Alignment */
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.mic-button:hover {
+  background-color: #e0e0e0;
+  transform: scale(1.05); /* Subtle grow effect on hover */
+}
+
+/* Active Recording State (Red Pulse) */
+.mic-button.recording {
+  background-color: #ffebee;
+  border-color: #ffcdd2;
+  color: #d32f2f;            
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
+
 /* speak button */
 .speak-button {
   background: #f1f1f1;

@@ -27,6 +27,9 @@ function ChatRoutes() {
   const audioRef = useRef(null);
   const chatWindowRef = useRef(null);
   const [streamingText, setStreamingText] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   const location = useLocation();
 
@@ -126,6 +129,91 @@ function ChatRoutes() {
     await playSpeech(text);
   };
 
+  const handleMicClick = async () => {
+    if (isRecording) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      // 1. Force Mono Audio (Better for Speech-to-Text)
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { 
+            channelCount: 1, 
+            echoCancellation: true, 
+            noiseSuppression: true 
+        } 
+      });
+
+      // 2. Check supported mimeTypes
+      let mimeType = "audio/webm"; // Default
+      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+        mimeType = "audio/webm;codecs=opus";
+      } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+        mimeType = "audio/mp4"; // Safari fallback
+      }
+
+      console.log(`🎤 Starting recording with mimeType: ${mimeType}`);
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        setLoading(true);
+        try {
+          console.log("🛑 Recording stopped. Processing...");
+          
+          // Convert to WAV
+          const wavBlob = await exportWAV(audioChunksRef.current, mimeType);
+          console.log(`📤 Sending WAV file: ${(wavBlob.size / 1024).toFixed(2)} KB`);
+
+          const formData = new FormData();
+          formData.append("audio", wavBlob, "recording.wav");
+          formData.append("language", language);
+
+          const response = await fetch("http://127.0.0.1:5000/api/stt", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await response.json();
+          
+          if (response.ok && data.text) {
+             setInput(data.text); 
+          } else {
+             console.error("STT Error:", data.error);
+             // If it's a "No Match" error, it means the audio was received but not understood
+             alert(data.error || "Voice not recognized.");
+          }
+
+        } catch (err) {
+          console.error("Upload/Conversion failed", err);
+        } finally {
+          setLoading(false);
+          stream.getTracks().forEach((track) => track.stop());
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+
+    } catch (err) {
+      console.error("Microphone Error:", err);
+      alert("Microphone access denied or not available.");
+    }
+  };
+  
+  
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -249,9 +337,19 @@ function ChatRoutes() {
 
                 <footer className="chat-input-area">
                   <form className="chat-input-form" onSubmit={sendMessage}>
+                    {/* Mic Button */}
+                    <button
+                      type="button"
+                      className={`mic-button ${isRecording ? "recording" : ""}`}
+                      onClick={handleMicClick}
+                      disabled={loading}
+                    >
+                      {isRecording ? "🟥" : "🎤"}
+                    </button>
+
                     <input
                       type="text"
-                      placeholder="Type your message..."
+                      placeholder={isRecording ? "Listening... (Click Red to Stop)" : "Type your message..."}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       disabled={loading}
@@ -291,4 +389,74 @@ export default function App() {
       <ChatRoutes />
     </Router>
   );
+}
+
+// -----------------------------------------------------------------------------
+// 🛠️ UPDATED HELPER: More robust WAV conversion
+// -----------------------------------------------------------------------------
+
+const exportWAV = (audioChunks, mimeType) => {
+  return new Promise((resolve, reject) => {
+    const blob = new Blob(audioChunks, { type: mimeType });
+    const fileReader = new FileReader();
+
+    fileReader.onload = () => {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Decode the compressed browser audio (WebM/MP4) into raw PCM
+      audioContext.decodeAudioData(fileReader.result, (buffer) => {
+        // Encode raw PCM into WAV
+        const wavBuffer = audioBufferToWav(buffer);
+        resolve(new Blob([wavBuffer], { type: "audio/wav" }));
+      }, (e) => {
+        console.error("Decoding error:", e);
+        reject(e);
+      });
+    };
+    fileReader.readAsArrayBuffer(blob);
+  });
+};
+
+function audioBufferToWav(buffer) {
+  const numOfChan = buffer.numberOfChannels;
+  const length = buffer.length * numOfChan * 2 + 44;
+  const out = new ArrayBuffer(length);
+  const view = new DataView(out);
+  const channels = [];
+  let i, sample, offset = 0, pos = 0;
+
+  // write WAVE header
+  setUint32(0x46464952); // "RIFF"
+  setUint32(length - 8); // file length - 8
+  setUint32(0x45564157); // "WAVE"
+  setUint32(0x20746d66); // "fmt " chunk
+  setUint32(16); // length = 16
+  setUint16(1); // PCM (uncompressed)
+  setUint16(numOfChan);
+  setUint32(buffer.sampleRate);
+  setUint32(buffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+  setUint16(numOfChan * 2); // block-align
+  setUint16(16); // 16-bit
+  setUint32(0x61746164); // "data" - chunk
+  setUint32(length - pos - 4); // chunk length
+
+  // Interleave channels
+  for (i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
+
+  while (pos < buffer.length) {
+    for (i = 0; i < numOfChan; i++) {
+      // Clamp the value to -1.0 to 1.0
+      sample = Math.max(-1, Math.min(1, channels[i][pos])); 
+      // Scale to 16-bit integer
+      sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      view.setInt16(44 + offset, sample, true);
+      offset += 2;
+    }
+    pos++;
+  }
+
+  return out;
+
+  function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+  function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
 }

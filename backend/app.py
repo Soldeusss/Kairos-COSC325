@@ -436,6 +436,85 @@ def text_to_speech():
         print(f"Error in /api/tts: {e}")
         return jsonify({"error": str(e)}), 500        
 
+# ----------------------------------------------------------------------
+# NEW API ENDPOINT FOR SPEECH-TO-TEXT (STT) (user to ai)
+# ----------------------------------------------------------------------
+@app.route('/api/stt', methods=['POST'])
+def speech_to_text():
+    # Ensure these are imported
+    import tempfile
+    import os
+    
+    try:
+        if 'audio' not in request.files:
+            return jsonify({"error": "No audio file provided"}), 400
+        
+        audio_file = request.files['audio']
+        language_code = request.form.get('language', 'en-US') 
+        
+        azure_langs = {
+            "spanish": "es-ES",
+            "french": "fr-FR",
+            "german": "de-DE",
+            "english": "en-US"
+        }
+        selected_lang = azure_langs.get(language_code.lower(), language_code)
+
+        # # --- WINDOWS FIX START ---
+        # # 1. Create a temp file, but CLOSE the handle immediately
+        # # This releases the Windows file lock so other steps can use it.
+        # temp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        # temp.close() 
+        # temp_filename = temp.name
+
+        # --- DEBUGGING START ---
+        # Save to a real file so we can listen to it!
+        temp_filename = "debug_record.wav" 
+        # --- DEBUGGING END ---
+        
+        try:
+            # 2. Now it is safe to write to the file path
+            audio_file.save(temp_filename)
+
+            # 3. Configure Azure
+            speech_key = app.config['AZURE_SPEECH_KEY']
+            speech_region = app.config['AZURE_SPEECH_REGION']
+            speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
+            speech_config.speech_recognition_language = selected_lang 
+
+            audio_config = speechsdk.audio.AudioConfig(filename=temp_filename)
+            speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+
+            print(f"🎙️ Processing audio in {selected_lang}...")
+            result = speech_recognizer.recognize_once_async().get()
+
+        finally:
+            # 4. Cleanup: Release Azure objects and delete file
+            # We delete these objects to force them to let go of the file
+            del audio_config
+            del speech_recognizer
+            
+        #     if os.path.exists(temp_filename):
+        #         try:
+        #             os.remove(temp_filename)
+        #         except Exception:
+        #             pass # If Windows still holds it, just ignore. It's a temp file.
+        # # --- WINDOWS FIX END ---
+
+        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            print(f"✅ Transcribed: {result.text}")
+            return jsonify({"text": result.text}), 200
+        elif result.reason == speechsdk.ResultReason.NoMatch:
+            print("❌ No speech recognized")
+            return jsonify({"error": "Could not recognize speech."}), 400
+        elif result.reason == speechsdk.ResultReason.Canceled:
+            print("❌ Azure Canceled")
+            return jsonify({"error": "Azure configuration error."}), 500
+
+    except Exception as e:
+        print(f"Error in /api/stt: {e}")
+        return jsonify({"error": str(e)}), 500
+    
 
 with app.app_context():
     ensure_default_user() 
