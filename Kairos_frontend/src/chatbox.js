@@ -16,10 +16,10 @@ function ChatRoutes() {
   const [messages, setMessages] = useState([
     { sender: "ai", text: "Hello! How can I help you today?" },
   ]);
+  const [conversationId, setConversationId] = useState(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(true);
-
   const [topic, setTopic] = useState("general");
   const [language, setLanguage] = useState("spanish");
   const [proficiency, setProficiency] = useState("beginner");
@@ -34,6 +34,11 @@ function ChatRoutes() {
   useEffect(() => {
     if (location.state?.conversation) {
       setMessages(location.state.conversation.messages);
+
+      // Conversation history check:
+      if (location.state.conversation.id) {
+        setConversationId(location.state.conversation.id);
+      }
     }
   }, [location.state]);
 
@@ -136,14 +141,23 @@ function ChatRoutes() {
         body: JSON.stringify({
           userId: 1,
           text: input,
-          conversationId: null,
+          conversationId: conversationId, // <--- CHANGE 1: Use the state variable
           topic,
           language,
           proficiency,
         }),
       });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
-      const data = await res.json();
+      
+      const data = await res.json(); // Parse JSON first
+      
+      // <--- CHANGE 2: Capture the ID from the backend!
+      let currentConvoId = conversationId; 
+      if (data.conversationId) {
+          setConversationId(data.conversationId);
+          currentConvoId = data.conversationId; // Update local var for saving below
+      }
+
       const aiText = data?.aiResponse?.text || "Error: No AI response.";
 
       speak(aiText);
@@ -152,12 +166,19 @@ function ChatRoutes() {
 
       // Save to history
       const existing = JSON.parse(localStorage.getItem("chatHistory")) || [];
+      
+      // <--- CHANGE 3: Save the ID into LocalStorage too
       const newChat = {
+        id: currentConvoId, // Save the Backend ID here
         title: input.substring(0, 20) || "New Chat",
         date: new Date(),
         messages: [...messages, userMessage, { sender: "ai", text: aiText }],
       };
+      
+      // Logic to update existing chat in history vs adding new one could go here
+      // For now, we just append to keep it simple as per your current code:
       localStorage.setItem("chatHistory", JSON.stringify([...existing, newChat]));
+      
     } catch (err) {
       console.error("❌ Chat API error:", err);
       setMessages((prev) => [

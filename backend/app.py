@@ -436,6 +436,10 @@ def text_to_speech():
         print(f"Error in /api/tts: {e}")
         return jsonify({"error": str(e)}), 500        
 
+
+with app.app_context():
+    ensure_default_user() 
+     # safe to call now; DB is migrated when you run the server
+
 if __name__ == "__main__":
-    ensure_default_user()  # safe to call now; DB is migrated when you run the server
     app.run(debug=True, host="127.0.0.1", port=5000)
