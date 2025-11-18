@@ -72,3 +72,24 @@ font-size: 2.8rem;
     color:#ffffff;
     font-size:1.4em;
 }
+
+
+.history-text {
+  flex: 1;
+}
+
+.delete-btn {
+  background: #d9534f;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 10px;
+}
+
+.delete-btn:hover {
+  background: #c9302c;
+}
+
