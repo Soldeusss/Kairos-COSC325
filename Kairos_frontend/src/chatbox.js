@@ -1,33 +1,49 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   Link,
   useLocation,
-  useNavigate,
 } from "react-router-dom";
 import "./chatbox_style.css";
 import Settings from "./settings";
 import History from "./history";
 
-// 💡 Inner component handles routing logic
+// === MDBootstrap Imports ===
+import {
+  MDBContainer,
+  MDBRow,
+  MDBCol,
+  MDBCard,
+  MDBCardBody,
+  MDBBtn,
+  MDBIcon,
+  MDBInputGroup,
+  MDBTypography,
+  MDBSpinner
+} from 'mdb-react-ui-kit';
+
 function ChatRoutes() {
   const [messages, setMessages] = useState([
-    { sender: "ai", text: "Hello! How can I help you today?" },
+    { sender: "ai", text: "Hello! I am Kairos. How can I help you learn today?" },
   ]);
   const [conversationId, setConversationId] = useState(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(true);
+
   const [topic, setTopic] = useState("general");
   const [language, setLanguage] = useState("spanish");
   const [proficiency, setProficiency] = useState("beginner");
   const [isMuted, setIsMuted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  
+  // === 1. RESTORED: Streaming Text State ===
+  const [streamingText, setStreamingText] = useState(null);
+
   const audioRef = useRef(null);
   const chatWindowRef = useRef(null);
-  const [streamingText, setStreamingText] = useState(null);
-  const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
@@ -37,8 +53,6 @@ function ChatRoutes() {
   useEffect(() => {
     if (location.state?.conversation) {
       setMessages(location.state.conversation.messages);
-
-      // Conversation history check:
       if (location.state.conversation.id) {
         setConversationId(location.state.conversation.id);
       }
@@ -62,6 +76,7 @@ function ChatRoutes() {
     loadSettings();
   }, []);
 
+  // Mute Logic
   useEffect(() => {
     if (isMuted && audioRef.current) {
       audioRef.current.pause();
@@ -69,13 +84,14 @@ function ChatRoutes() {
     }
   }, [isMuted]);
 
+  // Auto-scroll
   useEffect(() => {
     if (chatWindowRef.current) {
       chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Typewriter effect
+  // === 2. RESTORED: Typewriter Effect Logic ===
   useEffect(() => {
     if (!streamingText) return;
     let index = 0;
@@ -97,11 +113,24 @@ function ChatRoutes() {
         clearInterval(intervalId);
         setStreamingText(null);
         setLoading(false);
+        
+        // Save to history (Moved here so it saves the FULL message)
+        const existing = JSON.parse(localStorage.getItem("chatHistory")) || [];
+        const aiMessage = { sender: "ai", text: streamingText }; 
+        const userMessage = messages[messages.length - 1];
+        const newChat = {
+          id: conversationId, 
+          title: userMessage?.text?.substring(0, 20) || "New Chat",
+          date: new Date(),
+          messages: [...messages, aiMessage], 
+        };
+        localStorage.setItem("chatHistory", JSON.stringify([...existing, newChat]));
       }
-    }, 30);
+    }, 30); // Speed: 30ms per character
     return () => clearInterval(intervalId);
-  }, [streamingText]);
+  }, [streamingText]); 
 
+  // TTS Logic
   const playSpeech = async (text) => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -129,6 +158,7 @@ function ChatRoutes() {
     await playSpeech(text);
   };
 
+  // Mic Logic (Path 1)
   const handleMicClick = async () => {
     if (isRecording) {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -139,25 +169,17 @@ function ChatRoutes() {
     }
 
     try {
-      // 1. Force Mono Audio (Better for Speech-to-Text)
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-            channelCount: 1, 
-            echoCancellation: true, 
-            noiseSuppression: true 
-        } 
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } 
       });
 
-      // 2. Check supported mimeTypes
-      let mimeType = "audio/webm"; // Default
+      let mimeType = "audio/webm"; 
       if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
         mimeType = "audio/webm;codecs=opus";
       } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
-        mimeType = "audio/mp4"; // Safari fallback
+        mimeType = "audio/mp4"; 
       }
 
-      console.log(`🎤 Starting recording with mimeType: ${mimeType}`);
-      
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -171,12 +193,7 @@ function ChatRoutes() {
       mediaRecorder.onstop = async () => {
         setLoading(true);
         try {
-          console.log("🛑 Recording stopped. Processing...");
-          
-          // Convert to WAV
           const wavBlob = await exportWAV(audioChunksRef.current, mimeType);
-          console.log(`📤 Sending WAV file: ${(wavBlob.size / 1024).toFixed(2)} KB`);
-
           const formData = new FormData();
           formData.append("audio", wavBlob, "recording.wav");
           formData.append("language", language);
@@ -187,17 +204,13 @@ function ChatRoutes() {
           });
 
           const data = await response.json();
-          
           if (response.ok && data.text) {
              setInput(data.text); 
           } else {
-             console.error("STT Error:", data.error);
-             // If it's a "No Match" error, it means the audio was received but not understood
              alert(data.error || "Voice not recognized.");
           }
-
         } catch (err) {
-          console.error("Upload/Conversion failed", err);
+          console.error("Upload failed", err);
         } finally {
           setLoading(false);
           stream.getTracks().forEach((track) => track.stop());
@@ -209,14 +222,14 @@ function ChatRoutes() {
 
     } catch (err) {
       console.error("Microphone Error:", err);
-      alert("Microphone access denied or not available.");
+      alert("Microphone access denied.");
     }
   };
-  
-  
+
   const sendMessage = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!input.trim()) return;
+    
     const userMessage = { sender: "user", text: input };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
@@ -229,43 +242,27 @@ function ChatRoutes() {
         body: JSON.stringify({
           userId: 1,
           text: input,
-          conversationId: conversationId, // <--- CHANGE 1: Use the state variable
+          conversationId: conversationId, 
           topic,
           language,
           proficiency,
         }),
       });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
-      
-      const data = await res.json(); // Parse JSON first
-      
-      // <--- CHANGE 2: Capture the ID from the backend!
-      let currentConvoId = conversationId; 
-      if (data.conversationId) {
-          setConversationId(data.conversationId);
-          currentConvoId = data.conversationId; // Update local var for saving below
-      }
+      const data = await res.json(); 
+      if (data.conversationId) setConversationId(data.conversationId);
 
       const aiText = data?.aiResponse?.text || "Error: No AI response.";
-
+      
+      // ===  RESTORED: Trigger Typewriter instead of showing text immediately ===
       speak(aiText);
+      
+      // Add a BLANK message for AI
       setMessages((prev) => [...prev, { sender: "ai", text: "" }]);
+      
+      // Start the typewriter effect
       setStreamingText(aiText);
-
-      // Save to history
-      const existing = JSON.parse(localStorage.getItem("chatHistory")) || [];
-      
-      // <--- CHANGE 3: Save the ID into LocalStorage too
-      const newChat = {
-        id: currentConvoId, // Save the Backend ID here
-        title: input.substring(0, 20) || "New Chat",
-        date: new Date(),
-        messages: [...messages, userMessage, { sender: "ai", text: aiText }],
-      };
-      
-      // Logic to update existing chat in history vs adding new one could go here
-      // For now, we just append to keep it simple as per your current code:
-      localStorage.setItem("chatHistory", JSON.stringify([...existing, newChat]));
+      // ==========================================================================
       
     } catch (err) {
       console.error("❌ Chat API error:", err);
@@ -273,112 +270,173 @@ function ChatRoutes() {
         ...prev,
         { sender: "ai", text: "Sorry, I couldn't reach the server." },
       ]);
-      setLoading(false);
-    }
+      setLoading(false); // Only stop loading here on error. Otherwise typewriter handles it.
+    } 
   };
 
+  // === MDBootstrap "Modern Dark" UI ===
   return (
-    <div className="app-layout">
-      {/* Sidebar */}
-      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-        <button className="toggle-btn" onClick={() => setMenuOpen(!menuOpen)}>
-          {menuOpen ? "❮" : "❯"}
-        </button>
-        <h2>Main Menu</h2>
-        <ul>
-          <li><Link to="/">Chat</Link></li>
-          <li><Link to="/history">History</Link></li>
-          <li><Link to="/settings">Settings</Link></li>
-        </ul>
-      </aside>
+    <MDBContainer fluid className="d-flex vh-100 p-0 overflow-hidden">
+      <MDBRow className="w-100 m-0 flex-nowrap h-100">
+        
+        {/* Sidebar */}
+        <MDBCol md="3" lg="2" 
+          className="d-none d-md-flex flex-column text-white p-3 border-end border-secondary"
+          style={{ backgroundColor: "#151515" }} 
+        >
+          <div className="d-flex align-items-center mb-4 text-primary">
+            <MDBIcon fas icon="robot" className="me-2 fa-2x" />
+            <span className="fs-4 fw-bold">Kairos</span>
+          </div>
+          
+          <div className="d-grid gap-2">
+            <Link to="/" className="btn btn-outline-light text-start border-0">
+              <MDBIcon fas icon="comments" className="me-2" /> Chat
+            </Link>
+            <Link to="/history" className="btn btn-outline-light text-start border-0">
+              <MDBIcon fas icon="history" className="me-2" /> History
+            </Link>
+            <Link to="/settings" className="btn btn-outline-light text-start border-0">
+              <MDBIcon fas icon="cog" className="me-2" /> Settings
+            </Link>
+          </div>
+          
+          <div className="mt-auto pt-3 border-top border-secondary">
+            <small className="text-white-50">User Profile</small>
+            <div className="fw-bold">Student</div>
+          </div>
+        </MDBCol>
 
-      {/* Main content */}
-      <div className="chat-container">
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <>
-                <header className="chat-header">
-                  <h1>Kairos Chat</h1>
-                  <button
-                    className="mute-button"
-                    onClick={() => setIsMuted(!isMuted)}
+        {/* Main Content */}
+        <MDBCol md="9" lg="10" className="d-flex flex-column p-0 position-relative">
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <>
+                  {/* Header */}
+                  <div 
+                    className="p-3 shadow-4-strong d-flex justify-content-between align-items-center z-index-1 border-bottom border-secondary"
+                    style={{ backgroundColor: "#1f1f1f" }}
                   >
-                    {isMuted ? "🔇" : "🔊"}
-                  </button>
-                </header>
-
-                <main className="chat-window" ref={chatWindowRef}>
-                  {messages.map((msg, idx) => (
-                    <div
-                      key={idx}
-                      className={`message ${
-                        msg.sender === "ai" ? "ai-message" : "user-message"
-                      }`}
+                    <MDBTypography tag="h5" className="mb-0 text-white">
+                      <MDBIcon fas icon="graduation-cap" className="me-2 text-primary" />
+                      Kairos Chat
+                    </MDBTypography>
+                    <MDBBtn 
+                      color={isMuted ? "danger" : "light"} 
+                      outline 
+                      floating 
+                      size="sm" 
+                      onClick={() => setIsMuted(!isMuted)}
                     >
-                      <p>{msg.text}</p>
-                      {msg.sender === "ai" && (
-                        <button
-                          onClick={() => playSpeech(msg.text)}
-                          className="speak-button"
+                      <MDBIcon fas icon={isMuted ? "volume-mute" : "volume-up"} />
+                    </MDBBtn>
+                  </div>
+
+                  {/* Chat Area */}
+                  <div 
+                    className="flex-grow-1 p-4 overflow-auto" 
+                    ref={chatWindowRef}
+                    style={{ backgroundColor: "#252525" }} 
+                  >
+                    {messages.map((msg, idx) => (
+                      <div
+                        key={idx}
+                        className={`d-flex mb-4 ${
+                          msg.sender === "user" ? "justify-content-end" : "justify-content-start"
+                        }`}
+                      >
+                        {msg.sender === "ai" && (
+                          <div className="d-flex flex-column align-items-center me-2">
+                             <MDBIcon fas icon="robot" className="text-primary fa-lg mt-2" />
+                          </div>
+                        )}
+
+                        <MDBCard 
+                          className={`shadow-2-strong ${
+                            msg.sender === "user" 
+                              ? "bg-primary text-white" 
+                              : "text-white"
+                          }`}
+                          style={{ 
+                            borderRadius: "15px", 
+                            maxWidth: "75%",
+                            backgroundColor: msg.sender === "ai" ? "#333333" : "" 
+                          }}
                         >
-                          🔊
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {loading && (
-                    <div className="message ai-message">
-                      <p>Thinking...</p>
-                    </div>
-                  )}
-                </main>
+                          <MDBCardBody className="p-3">
+                            <p className="mb-0" style={{whiteSpace: "pre-wrap"}}>{msg.text}</p>
+                            {msg.sender === "ai" && (
+                              <div className="text-end mt-2">
+                                <MDBIcon 
+                                  fas icon="volume-up" 
+                                  className="text-white-50 pointer-cursor hover-white"
+                                  style={{cursor: 'pointer'}}
+                                  onClick={() => playSpeech(msg.text)}
+                                />
+                              </div>
+                            )}
+                          </MDBCardBody>
+                        </MDBCard>
+                        
+                        {msg.sender === "user" && (
+                           <div className="d-flex flex-column align-items-center ms-2">
+                             <MDBIcon fas icon="user" className="text-white-50 fa-lg mt-2" />
+                           </div>
+                        )}
+                      </div>
+                    ))}
+                    
+                    {loading && (
+                       <div className="d-flex justify-content-start mb-4">
+                          <div className="d-flex align-items-center p-3 rounded-5 shadow-1-strong text-white-50" style={{ backgroundColor: "#333333" }}>
+                            <MDBSpinner size="sm" role="status" tag="span" className="me-2 text-primary" />
+                            <span>Thinking...</span>
+                          </div>
+                       </div>
+                    )}
+                  </div>
 
-                <footer className="chat-input-area">
-                  <form className="chat-input-form" onSubmit={sendMessage}>
-                    {/* Mic Button */}
-                    <button
-                      type="button"
-                      className={`mic-button ${isRecording ? "recording" : ""}`}
-                      onClick={handleMicClick}
-                      disabled={loading}
-                    >
-                      {isRecording ? "🟥" : "🎤"}
-                    </button>
-
-                    <input
-                      type="text"
-                      placeholder={isRecording ? "Listening... (Click Red to Stop)" : "Type your message..."}
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      disabled={loading}
-                    />
-                    <button type="submit" id="send-button" disabled={loading}>
-                      Send
-                    </button>
-                  </form>
-                </footer>
-              </>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <Settings
-                topic={topic}
-                setTopic={setTopic}
-                language={language}
-                setLanguage={setLanguage}
-                proficiency={proficiency}
-                setProficiency={setProficiency}
-              />
-            }
-          />
-          <Route path="/history" element={<History />} />
-        </Routes>
-      </div>
-    </div>
+                  {/* Input Area */}
+                  <div 
+                    className="p-3 border-top border-secondary"
+                    style={{ backgroundColor: "#1f1f1f" }}
+                  >
+                    <MDBInputGroup className="mb-0">
+                      <MDBBtn 
+                        color={isRecording ? "danger" : "light"}
+                        className="shadow-0"
+                        outline
+                        onClick={handleMicClick}
+                      >
+                         <MDBIcon fas icon={isRecording ? "stop" : "microphone"} className={isRecording ? "fa-beat-fade" : ""} />
+                      </MDBBtn>
+                      
+                      <input
+                        className="form-control text-white border-secondary"
+                        placeholder={isRecording ? "Listening..." : "Type a message..."}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && sendMessage(e)}
+                        disabled={loading || isRecording}
+                        style={{ backgroundColor: "#333333" }} 
+                      />
+                      
+                      <MDBBtn color="primary" onClick={sendMessage} disabled={loading || isRecording}>
+                        <MDBIcon fas icon="paper-plane" />
+                      </MDBBtn>
+                    </MDBInputGroup>
+                  </div>
+                </>
+              }
+            />
+            <Route path="/settings" element={<Settings topic={topic} setTopic={setTopic} language={language} setLanguage={setLanguage} proficiency={proficiency} setProficiency={setProficiency} />} />
+            <Route path="/history" element={<History />} />
+          </Routes>
+        </MDBCol>
+      </MDBRow>
+    </MDBContainer>
   );
 }
 
@@ -391,27 +449,17 @@ export default function App() {
   );
 }
 
-// -----------------------------------------------------------------------------
-// 🛠️ UPDATED HELPER: More robust WAV conversion
-// -----------------------------------------------------------------------------
-
+// Helper: Export WAV
 const exportWAV = (audioChunks, mimeType) => {
   return new Promise((resolve, reject) => {
     const blob = new Blob(audioChunks, { type: mimeType });
     const fileReader = new FileReader();
-
     fileReader.onload = () => {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      
-      // Decode the compressed browser audio (WebM/MP4) into raw PCM
       audioContext.decodeAudioData(fileReader.result, (buffer) => {
-        // Encode raw PCM into WAV
         const wavBuffer = audioBufferToWav(buffer);
         resolve(new Blob([wavBuffer], { type: "audio/wav" }));
-      }, (e) => {
-        console.error("Decoding error:", e);
-        reject(e);
-      });
+      }, reject);
     };
     fileReader.readAsArrayBuffer(blob);
   });
@@ -424,39 +472,30 @@ function audioBufferToWav(buffer) {
   const view = new DataView(out);
   const channels = [];
   let i, sample, offset = 0, pos = 0;
-
-  // write WAVE header
-  setUint32(0x46464952); // "RIFF"
-  setUint32(length - 8); // file length - 8
-  setUint32(0x45564157); // "WAVE"
-  setUint32(0x20746d66); // "fmt " chunk
-  setUint32(16); // length = 16
-  setUint16(1); // PCM (uncompressed)
+  setUint32(0x46464952); 
+  setUint32(length - 8); 
+  setUint32(0x45564157); 
+  setUint32(0x20746d66); 
+  setUint32(16); 
+  setUint16(1); 
   setUint16(numOfChan);
   setUint32(buffer.sampleRate);
-  setUint32(buffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
-  setUint16(numOfChan * 2); // block-align
-  setUint16(16); // 16-bit
-  setUint32(0x61746164); // "data" - chunk
-  setUint32(length - pos - 4); // chunk length
-
-  // Interleave channels
+  setUint32(buffer.sampleRate * 2 * numOfChan); 
+  setUint16(numOfChan * 2); 
+  setUint16(16); 
+  setUint32(0x61746164); 
+  setUint32(length - pos - 4); 
   for (i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
-
   while (pos < buffer.length) {
     for (i = 0; i < numOfChan; i++) {
-      // Clamp the value to -1.0 to 1.0
       sample = Math.max(-1, Math.min(1, channels[i][pos])); 
-      // Scale to 16-bit integer
       sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
       view.setInt16(44 + offset, sample, true);
       offset += 2;
     }
     pos++;
   }
-
   return out;
-
   function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
   function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
 }

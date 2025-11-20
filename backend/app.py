@@ -262,7 +262,7 @@ def process_message():
             model=deployment,
             messages=message_history, # Pass the entire conversation history
             temperature=0.7,
-            max_tokens=150
+            max_tokens=300
         )
         
         ai_text = response.choices[0].message.content.strip()
@@ -397,17 +397,17 @@ def text_to_speech():
         speech_region = app.config['AZURE_SPEECH_REGION']
         speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
 
-        # 2. Map our app's language name to a specific, high-quality Azure voice
-        # (You can find more voices in the Azure documentation)
+        # Map's our app's language name to a specific, high-quality Azure voice
+        
         voice_map = {
             "spanish": "es-ES-ElviraNeural",  # Spain (Female)
             "french": "fr-FR-DeniseNeural",   # France (Female)
-            "german": "de-DE-KillianNeural",    # Germany (Female)
+            "german": "de-DE-KillianNeural",    # Germany (Male)
             "english": "en-US-JennyNeural"    # US (Female)
         }
 
         # Set the voice, defaulting to English if no match is found
-        voice = voice_map.get(language, "en-US-JennyNeural")
+        voice = voice_map.get(language, "en-US-AriaNeural")
         speech_config.speech_synthesis_voice_name = voice
 
         # 3. Synthesize the speech
