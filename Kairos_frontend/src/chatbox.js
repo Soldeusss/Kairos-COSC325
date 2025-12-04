@@ -39,7 +39,7 @@ function ChatRoutes() {
   const [isMuted, setIsMuted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   
-  // === 1. RESTORED: Streaming Text State ===
+  // === Streaming Text State ===
   const [streamingText, setStreamingText] = useState(null);
 
   const audioRef = useRef(null);
@@ -91,7 +91,7 @@ function ChatRoutes() {
     }
   }, [messages]);
 
-  // === 2. RESTORED: Typewriter Effect Logic ===
+  // === Typewriter Effect Logic ===
   useEffect(() => {
     if (!streamingText) return;
     let index = 0;
@@ -254,7 +254,7 @@ function ChatRoutes() {
 
       const aiText = data?.aiResponse?.text || "Error: No AI response.";
       
-      // ===  RESTORED: Trigger Typewriter instead of showing text immediately ===
+      // === Trigger Typewriter instead of showing text immediately ===
       speak(aiText);
       
       // Add a BLANK message for AI

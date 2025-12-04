@@ -400,10 +400,14 @@ def text_to_speech():
         # Map's our app's language name to a specific, high-quality Azure voice
         
         voice_map = {
-            "spanish": "es-ES-ElviraNeural",  # Spain (Female)
+            "spanish": "es-ES-ElviraNeural",  # Spain(Female)
             "french": "fr-FR-DeniseNeural",   # France (Female)
             "german": "de-DE-KillianNeural",    # Germany (Male)
-            "english": "en-US-JennyNeural"    # US (Female)
+            "english": "en-US-JennyNeural",    # US (Female)
+            "hindi": "hi-IN-SwaraNeural", 
+            "chinese": "zh-CN-XiaoxiaoNeural",
+            "japanese": "ja-JP-NanamiNeural",
+            "thai": "th-TH-PremwadeeNeural"
         }
 
         # Set the voice, defaulting to English if no match is found
@@ -456,7 +460,11 @@ def speech_to_text():
             "spanish": "es-ES",
             "french": "fr-FR",
             "german": "de-DE",
-            "english": "en-US"
+            "english": "en-US",
+            "hindi": "hi-IN",
+            "chinese": "zh-CN",
+            "japanese": "ja-JP",
+            "thai": "th-TH"
         }
         selected_lang = azure_langs.get(language_code.lower(), language_code)
 

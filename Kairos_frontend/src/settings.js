@@ -75,6 +75,10 @@ function Settings({ topic, setTopic, language, setLanguage, proficiency, setProf
             <option value="german">German DE</option>
             <option value="spanish">Spanish ES</option>
             <option value="french">French FR</option>
+            <option value="hindi">Hindi IN</option>
+            <option value="chinese">Chinese CN</option>
+            <option value="japanese">Japanese JP</option>
+            <option value="thai">Thai TH</option>
           </select>
         </div>
 

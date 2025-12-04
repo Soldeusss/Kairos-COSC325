@@ -1,6 +1,6 @@
 @echo off
 echo ===================================
-echo Starting Kairos Full-Stack Project
+echo Starting Kairos Project
 echo ===================================
 
 echo --- Launching Backend Server...
